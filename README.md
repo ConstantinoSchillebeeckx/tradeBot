@@ -1,1 +1,1 @@
-# tradeBot
+# tradeBotTo start logging, run the following:```bashnohup python start_logging.py &```
