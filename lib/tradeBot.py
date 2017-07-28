@@ -8,6 +8,12 @@ from coinbase.wallet.client import Client
 import urllib3
 urllib3.disable_warnings()
 
+from bokeh.layouts import gridplot
+from bokeh.plotting import figure, show, output_file
+from bokeh.io import push_notebook, show, output_notebook
+from bokeh.palettes import Category10_10 as palette
+output_notebook()
+
 class tradeBot(object):
     '''
     A watcher that queries bitstamp for the current
@@ -107,10 +113,7 @@ class tradeBot(object):
 
         Yield:
             Pandas DataFrame of historical price data;
-            if the dataframe contains a column 'timestamp'
-            the index of the return dataframe will be the
-            date formatted timestamp column and the
-            timestamp column will be removed
+            with date as the index.
         '''
 
         available_columns = self.get_price().keys()
@@ -121,56 +124,106 @@ class tradeBot(object):
             assert isinstance(columns, list), "Must provide columns as a list"
             assert set(columns) <= set(available_columns), "Provided columns must include only: %s" %(','.join(available_columns))
 
+        if 'timestamp' not in columns: columns.append('timestamp')
+
         sql = "SELECT %s from %s" %(','.join(columns), self.db_table)
         self.cur.execute(sql)
         rows = self.cur.fetchall()
         df = pd.DataFrame(rows, columns=columns)
 
-        if 'timestamp' in columns:
-            df.index = pd.to_datetime(df.timestamp,unit='s')
-            df = df[[l for l in df.columns if l != 'timestamp']]
+        df.index = pd.to_datetime(df.timestamp,unit='s')
+        df = df[[l for l in df.columns if l != 'timestamp']]
 
         return df
 
-
-    def plot_historical_prices(self, columns=None, size=(16,6)):
+    def start_bokeh(self, size, title):
         '''
+        Wrapper to initiate bokeh figure
+
+        Args:
+            size (tuple, default 1200,400) - sets plot_width/plot_height
+            title (str, default: MSFT Candlestick) - title for plot
+
+        Yields:
+            bokeh figure
         '''
 
-        df = self.get_historical_prices()
+        tools = "pan,wheel_zoom,box_zoom,reset,save"
+
+        return figure(plot_width=size[0], plot_height=size[1], tools=tools, 
+                   x_axis_type='datetime', title=title, active_drag="pan", active_scroll="wheel_zoom")
+
+    def candlestick(self, size=(1200,400), resample='1B', title="MSFT Candlestick"):
+        '''
+        Generate a bokeh candlestick plot of the 'last'
+        price metric.
+
+        Args:
+            size (tuple, default 1200,400) - sets plot_width/plot_height
+            resample (str, default: 1B) - pandas resample rule, see https://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
+            title (str, default: MSFT Candlestick) - title for plot
+
+        Yield:
+            void
+        '''
+
+        df = self.get_historical_prices(columns=['last']) # get data
+        df = df.resample(resample).ohlc() # calculate ohlc
+        df.columns = df.columns.levels[1]
+        df.reset_index(inplace=True)
+
+        # generate plot
+        inc = df.close > df.open
+        dec = df.open > df.close
+        w = (df.ix[1,'timestamp']-df.ix[0,'timestamp']).total_seconds()*500 # half day in ms
+
+        p = self.start_bokeh(size, title)
+        p.segment(df.timestamp, df.high, df.timestamp, df.low, color="black")
+        p.vbar(df.timestamp[inc], w, df.open[inc], df.close[inc], fill_color="#bfe2bc", line_color="black")
+        p.vbar(df.timestamp[dec], w, df.open[dec], df.close[dec], fill_color="#F2583E", line_color="black")
+
+        show(p, notebook_handle=True)
+
+
+
+
+
+    def plot_historical_prices(self, columns=None, size=(1200,400), title=None, resample=None):
+        '''
+        Generate a bokeh line plot with the given columns
+
+        Args:
+            columns (list) - list of metrics to show in
+              plot, must be a key from get_price()
+            size (tuple, default 1200,400) - sets plot_width/plot_height
+            resample (str, default: 1B) - pandas resample rule, see https://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
+              if provided, median() is used to aggregate group.
+
+        Yield:
+            void
+        '''
+
+        df = self.get_historical_prices() # query data
         available_plot_columns = [l for l in self.get_price().keys() if l not in ['timestamp','volume']]
 
         if not columns: columns = available_plot_columns
 
-        ax = df[columns].plot(figsize=size)
-        ax.set_ylabel('Price (USD)')
+        dat = df[columns] # reduce data to requested columns
 
-        return ax
+        # resample if needed
+        if resample:
+            dat = dat.resample(resample).median()
+
+        # generate plot
+        p = self.start_bokeh(size, title)
+        p.xaxis.axis_label = 'Time'
+        p.yaxis.axis_label = 'Price (USD)'
+
+        for i, col in enumerate(dat.columns):
+            p.line(dat.index.tolist(), dat[col].tolist(), legend=col, line_width=2, line_alpha=0.6, line_color=palette[i])
+
+        p.legend.location = "top_left"
+
+        show(p, notebook_handle=True)
 
 
-'''
-CREATE TABLE public.history (
-    id SERIAL NOT NULL,
-    "last" float8 NOT NULL,
-    high float8 NOT NULL,
-    low float8 NOT NULL,
-    vwap float8 NOT NULL,
-    volume float8 NOT NULL,
-    bid float8 NOT NULL,
-    ask float8 NOT NULL,
-    "timestamp" float8 NOT NULL,
-    "open" float8 NOT NULL,
-    CONSTRAINT history_pkey PRIMARY KEY (id)
-);
-CREATE INDEX last_ix ON public.history ("last");
-CREATE INDEX high_ix ON public.history (high);
-CREATE INDEX low_ix ON public.history (low);
-CREATE INDEX vwap_ix ON public.history (vwap);
-CREATE INDEX volume_ix ON public.history (volume);
-CREATE INDEX bid_ix ON public.history (bid);
-CREATE INDEX ask_ix ON public.history (ask);
-CREATE INDEX timestamp_ix ON public.history ("timestamp");
-CREATE INDEX open_ix ON public.history ("open");
-TRUNCATE public.history RESTART identity CASCADE;
-
-'''
