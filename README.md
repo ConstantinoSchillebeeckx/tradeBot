@@ -14,8 +14,7 @@ nohup python start_logging.py &
 
 Generate table with
 
-'''sql
-
+```sql
 CREATE TABLE public.history (
     id SERIAL NOT NULL,
     "last" float8 NOT NULL,
@@ -39,5 +38,4 @@ CREATE INDEX ask_ix ON public.history (ask);
 CREATE INDEX timestamp_ix ON public.history ("timestamp");
 CREATE INDEX open_ix ON public.history ("open");
 TRUNCATE public.history RESTART identity CASCADE;
-
-'''
+```
