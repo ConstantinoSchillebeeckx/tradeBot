@@ -2,9 +2,22 @@
 
 ## Guiding principles
 
-- there is enough volatility in the daily market that if we time things properly, we could take advantage of that volatility
-- after a sustained drop in price, BUY - this volatility is temporary so we buy at a cheap rate
-- after leveling off, SELL - we are waiting for another drop to buy
+I want to take a very simple approach to buying/selling bitcoin to try and take advantage of the volatility in the current market. The underlying assumptions are the following:
+- large-ish drops in value are common and seem to occur almost at a daily level
+- these drops tend to be followed by a relatively quick recovery of the market
+
+Approach:
+- watch market value and wait for those drops (TODO define maginute of drop)
+- once the drop occurs, wait for the market to level (TODO define leveling of market) and BUY
+- wait for market to recover and sell once it plateaus (TODO define plateaus of market) and SELL
+
+
+I've setup a cronjob (running at a frequency of ~30s) to log prices.
+```
+# log prices every 30s
+# crontab only has minute granularity; so we sleep for ~30s between calls
+* * * * * /bin/bash -l -c "python /home/data_repo/ipython/Constantino/tradeBot/log_price.py; sleep 30 ; python /home/data_repo/ipython/Constantino/tradeBot/log_price.py"
+```
 
 
 To start logging, run the following:
