@@ -52,3 +52,18 @@ CREATE INDEX timestamp_ix ON public.history ("timestamp");
 CREATE INDEX open_ix ON public.history ("open");
 TRUNCATE public.history RESTART identity CASCADE;
 ```
+
+Generate view with
+
+```sql
+CREATE OR REPLACE VIEW public."output" AS
+ SELECT DISTINCT ON (floor(history."timestamp")) history.open AS "Open",
+    history.last AS "Close",
+    history.high AS "High",
+    history.low AS "Low",
+    history.volume AS "Volume",
+    0 AS "Adj Close",
+    to_timestamp(history."timestamp" + 17997::double precision) AS "Date Time"
+   FROM history
+  WHERE history.open > 0::double precision;
+```

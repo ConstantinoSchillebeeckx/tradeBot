@@ -102,6 +102,37 @@ class tradeBot(object):
             price = False
         return price
 
+
+    def generate_dat(self, out="dat.csv"):
+        '''
+        generate CSV file of historical price data for
+        use with pyalgotrade
+
+        Args:
+            out (str, optional, default 'dat.csv') - name of output file
+
+        Yield:
+            Pandas DataFrame of historical price data;
+            with date as the index.
+        '''
+
+        columns = ["Open","Close","High","Low","Volume","Adj Close","Date Time"]
+
+        # query data
+        sql = 'SELECT "%s" from %s' %('","'.join(columns), "output")
+        self.cur.execute(sql)
+        rows = self.cur.fetchall()
+
+        # setup df
+        df = pd.DataFrame(rows, columns=columns)
+        df.index = df['Date Time'].astype(str).str[:19]
+        df = df[[l for l in df.columns if l != 'Date Time']]
+
+        # write
+        df.to_csv(out)
+
+        return "File written to " + out
+
     def get_historical_prices(self, columns=None):
         '''
         query database for historical price data
